@@ -200,6 +200,17 @@ scan_form=c("DP","AF","AD")
 scan_inf="ANN"
 svp <- ScanVcfParam(info=scan_inf,geno=scan_form)
 vcf <- readVcf( vcf_file,"viruses",svp )
+vcf2 <- expand(vcf)
 geno(vcf)[["AD"]][4,c("S01")]
-
+head(geno(vcf2)[["AD"]])
+head(geno(vcf2)[["DP"]])
 library(adegenet)
+
+vcf2genpop <- function(vcf_file){
+  # should create a genpop object from a vcf of pooled indv.
+  # uses only AD field as of now, read depths becomes number of individuals
+  # if NA/. and DP set use all reference as allele, else NA
+  
+}
+
+
