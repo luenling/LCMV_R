@@ -195,12 +195,12 @@ for (smps in smpls){
 
 q(save="no")
 
-vcf_file="/Volumes/vetlinux01/LCMV/Run_0355/VarDict_2/all_samps_vardict_filt_norm_0.001_snpeff.vcf"
+vcf_file="/Volumes/vetlinux01/LCMV/Run_0355/VarDict_2/all_samps_vardict_filt_norm_0.001_snpeff_snp_only.vcf"
 scan_form=c("DP","AF","AD")
 scan_inf="ANN"
 svp <- ScanVcfParam(info=scan_inf,geno=scan_form)
 vcf <- readVcf( vcf_file,"viruses",svp )
-vcf2 <- expand(vcf)
+vcf2 <- expand(vcf,row.names=T)
 geno(vcf)[["AD"]][4,c("S01")]
 head(geno(vcf2)[["AD"]])
 head(geno(vcf2)[["DP"]])
@@ -210,6 +210,7 @@ vcf2genpop <- function(vcf_file){
   # should create a genpop object from a vcf of pooled indv.
   # uses only AD field as of now, read depths becomes number of individuals
   # if NA/. and DP set use all reference as allele, else NA
+  
   
 }
 
