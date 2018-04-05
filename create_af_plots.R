@@ -246,6 +246,13 @@ add.scatter.eig(ca1$eig,nf=3,xax=2,yax=3,posi="topleft")
 
 s.class(ca1$li,fac=smp_sh$txoxd,xax=2,yax=3,label=NULL,col=fac2col(smp_sh$txoxd),sub="CA 1-2",csub=1)
 
+b6rag2 = factor(smp_sh$Sample[smp_sh$type ==  "B6-RAG2-/-LY5"])
+sm_b6rag2 <- subset(smp_sh, Sample %in% b6rag2)
+sm_b6rag2 <- lapply(sm_b6rag2, function(x) if(is.factor(x)) factor(x) else x)
+
+vcf_pop_b6rag2 <- vcf_pop[b6rag2,]
+ca1 <- dudi.coa(tab(vcf_pop_b6rag2),scannf=FALSE,nf=3)
+s.class(ca1$li,fac=sm_b6rag2$Origin,xax=1,yax=2,label=NULL,col=fac2col(sm_b6rag2$Origin),sub="CA 1-2",csub=1)
 
 
 library(gsheet)
