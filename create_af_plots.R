@@ -195,23 +195,73 @@ for (smps in smpls){
 
 q(save="no")
 
-vcf_file="/Volumes/vetlinux01/LCMV/Run_0355/VarDict_2/all_samps_vardict_filt_norm_0.001_snpeff_snp_only.vcf"
-scan_form=c("DP","AF","AD")
+vcf_file="/Volumes/vetlinux01/LCMV/Run_0355/VarDict_2/all_samps_vardict_filt_norm_0.01_snpeff_snp_only.vcf"
+scan_form=c("DP","RD","AF","AD","AD2")
 scan_inf="ANN"
 svp <- ScanVcfParam(info=scan_inf,geno=scan_form)
-vcf <- readVcf( vcf_file,"viruses",svp )
+vcf <- readVcf( vcf_file,"viruses",svp,row.names=T )
 vcf2 <- expand(vcf,row.names=T)
 geno(vcf)[["AD"]][4,c("S01")]
 head(geno(vcf2)[["AD"]])
 head(geno(vcf2)[["DP"]])
 library(adegenet)
 
-vcf2genpop <- function(vcf_file){
+vcf2genpop <- function(vcf) {
   # should create a genpop object from a vcf of pooled indv.
   # uses only AD field as of now, read depths becomes number of individuals
   # if NA/. and DP set use all reference as allele, else NA
-  
-  
+  samps = rownames(colData(vcf))
+  vcf_tab_t = matrix(NA, ncol = length(samps), nrow = 0)
+  for(loc in rownames(vcf) ) {
+    l_base <- gsub("_[ACTG/]+$","",loc,perl=TRUE)
+    l_base <- gsub(":","_",l_base,fixed=TRUE)
+    a.num <- length(fixed(vcf[loc,])$ALT[[1]]) + 1
+    rvecs <- vapply(geno(vcf)[["AD"]][loc,],'[',1:a.num,1:a.num)
+    # check if reference depth was called from vardict
+    rvecs[1,is.na(rvecs[1,])] = rowSums(geno(vcf)$RD[loc,is.na(rvecs[1,]),])
+    # else use the one calculated by samtools mpileup (in AD2) or set to 1
+    rvecs[1,is.na(rvecs[1,])] =if ( length(geno(vcf)$AD2[loc,1][[1]]) > 0 ) vapply(geno(vcf)$AD2[loc,is.na(rvecs[1,])],'[[',1,1) else 1
+    # not reference allele fill NA with 0
+    rvecs[2:a.num,][which(is.na(rvecs[2:a.num,]))] = 0
+    # add rows to transposed tab and name them
+    vcf_tab_t = rbind(vcf_tab_t,rvecs)
+    rownames(vcf_tab_t)[(nrow(vcf_tab_t)-a.num+1):nrow(vcf_tab_t)] = paste0(l_base,".",1:a.num )
+  }
+  return(t(vcf_tab_t))
 }
 
+vcf_tab<-vcf2genpop(vcf)
+vcf_pop <- as.genpop(vcf_tab,ploidy=1,type="codom")
+d_nei <- dist.genpop(vcf_pop)
+ca1 <- dudi.coa(tab(vcf_pop),scannf=FALSE,nf=3)
+barplot(ca1$eig,main="Correspondance Analysis eigenvalues",
+        col=heat.colors(length(ca1$eig)))
+s.label(ca1$li, sub="CA 1-2",csub=2)
+add.scatter.eig(ca1$eig,nf=3,xax=1,yax=2,posi="bottomright")
+s.label(ca1$li, sub="CA 1-2",csub=2)
+add.scatter.eig(ca1$eig,nf=3,xax=1,yax=2,posi="bottomright")
 
+s.label(ca1$li,xax=2,yax=3,lab=popNames(vcf_pop),sub="CA 1-3",csub=2)
+add.scatter.eig(ca1$eig,nf=3,xax=2,yax=3,posi="topleft")
+
+s.class(ca1$li,fac=smp_sh$txoxd,xax=2,yax=3,label=NULL,col=fac2col(smp_sh$txoxd),sub="CA 1-2",csub=1)
+
+
+
+library(gsheet)
+sample_sheet="https://docs.google.com/spreadsheets/d/1L2u3CZV2v75bsRhfepGThshCqUjNhA8bzo453bDohSQ/edit?usp=sharing"
+smp_sh = gsheet2tbl(sample_sheet)
+smp_sh <- as.data.frame(lapply(smp_sh, factor)) 
+smp_sh = smp_sh[,1:4]
+smp_sh$type = as.factor(gsub('\\.\\d+$',"",smp_sh$Description,perl=T))
+smp_sh$txo = as.factor(paste(smp_sh$type,smp_sh$Origin,sep="x"))
+smp_sh$txoxd = as.factor(paste(smp_sh$type,smp_sh$Origin,smp_sh$Days,sep="x"))
+
+
+
+
+
+pairwise.fst(vcf_pop)
+dudi.pco(d_nei)
+library(adegenet)
+library(ade4)
