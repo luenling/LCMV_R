@@ -196,6 +196,7 @@ for (smps in smpls){
 q(save="no")
 
 vcf_file="/Volumes/vetlinux01/LCMV/Run_0355/VarDict_2/all_samps_vardict_filt_norm_0.01_snpeff_snp_only.vcf"
+vcf_file="all_samps_vardict_filt_norm_0.01_snpeff_snp_only.vcf"
 scan_form=c("DP","RD","AF","AD","AD2")
 scan_inf="ANN"
 svp <- ScanVcfParam(info=scan_inf,geno=scan_form)
@@ -219,8 +220,8 @@ vcf2genpop <- function(vcf) {
     rvecs <- vapply(geno(vcf)[["AD"]][loc,],'[',1:a.num,1:a.num)
     # check if reference depth was called from vardict
     rvecs[1,is.na(rvecs[1,])] = rowSums(geno(vcf)$RD[loc,is.na(rvecs[1,]),])
-    # else use the one calculated by samtools mpileup (in AD2) or set to 1
-    rvecs[1,is.na(rvecs[1,])] =if ( length(geno(vcf)$AD2[loc,1][[1]]) > 0 ) vapply(geno(vcf)$AD2[loc,is.na(rvecs[1,])],'[[',1,1) else 1
+    # else use the one calculated by samtools mpileup (in AD2) or set to DP
+    rvecs[1,is.na(rvecs[1,])] =if ( length(geno(vcf)$AD2[loc,1][[1]]) > 0 ) vapply(geno(vcf)$AD2[loc,is.na(rvecs[1,])],'[[',1,1) else 100
     # not reference allele fill NA with 0
     rvecs[2:a.num,][which(is.na(rvecs[2:a.num,]))] = 0
     # add rows to transposed tab and name them
@@ -244,16 +245,48 @@ add.scatter.eig(ca1$eig,nf=3,xax=1,yax=2,posi="bottomright")
 s.label(ca1$li,xax=2,yax=3,lab=popNames(vcf_pop),sub="CA 1-3",csub=2)
 add.scatter.eig(ca1$eig,nf=3,xax=2,yax=3,posi="topleft")
 
-s.class(ca1$li,fac=smp_sh$txoxd,xax=2,yax=3,label=NULL,col=fac2col(smp_sh$txoxd),sub="CA 1-2",csub=1)
+s.class(ca1$li,fac=smp_sh$txoxd,xax=2,yax=3,label=NULL,
+        col=fac2col(smp_sh$txoxd),sub="CA 1-2",csub=1)
 
 b6rag2 = factor(smp_sh$Sample[smp_sh$type ==  "B6-RAG2-/-LY5"])
 sm_b6rag2 <- subset(smp_sh, Sample %in% b6rag2)
 sm_b6rag2 <- lapply(sm_b6rag2, function(x) if(is.factor(x)) factor(x) else x)
 
-vcf_pop_b6rag2 <- vcf_pop[b6rag2,]
-ca1 <- dudi.coa(tab(vcf_pop_b6rag2),scannf=FALSE,nf=3)
-s.class(ca1$li,fac=sm_b6rag2$Origin,xax=1,yax=2,label=NULL,col=fac2col(sm_b6rag2$Origin),sub="CA 1-2",csub=1)
+library(corrplot)
+corrplot(as.matrix(dist.genpop(vcf_pop_b6rag2,method=2)), type = "full",is.corr=F)
 
+vcf_pop_b6rag2 <- vcf_pop[b6rag2,]
+ca1 <- dudi.coa(tab(vcf_pop_b6rag2),scannf=F,nf=4)
+ca2 <- dudi.pco(dist.genpop(vcf_pop_b6rag2,method=2), nf=4,scannf=F)
+plot(ca2$li[,1],ca2$li[,2],pch=19,col=fac2col(sm_b6rag2$Origin),xlab="PC1",ylab="PC2")
+abline(h=0)
+abline(v=0)
+legend("bottomright",legend=levels(sm_b6rag2$Origin),fill=fac2col(levels(sm_b6rag2$Origin)),ncol=2)
+text(ca2$li[,1],ca2$li[,2],labels = rownames(ca2$li), cex=0.5)
+add.scatter.eig(ca2$eig,nf=4,xax=1,yax=2,posi="bottomright",ratio=0.2)
+
+# find clusters
+find.clusters(tab(vcf_pop_b6rag2),max.n=6)
+
+# hclust tree
+hc_b6rag2 = hclust(dist.genpop(vcf_pop_b6rag2,method=1), method= "complete" )
+plot(hc_b6rag2,labels=sm_b6rag2$Sample,col=fac2col(sm_b6rag2$Origin))
+
+# MDS
+mds_b6rag2 <- cmdscale(dist.genpop(vcf_pop_b6rag2,method=2),eig=TRUE,k=4,x.ret=TRUE)
+plot(mds_b6rag2$points[,1],mds_b6rag2$points[,2])
+
+
+s.class(ca1$li,fac=sm_b6rag2$Origin,xax=1,yax=2,label=NULL,col=fac2col(levels(sm_b6rag2$Origin)),sub="CA 1-2",csub=1)
+add.scatter.eig(ca1$eig,nf=3,xax=1,yax=2,posi="bottomright",ratio=0.2)
+plot(ca1$li[,1],ca1$li[,2],pch=19,col=fac2col(sm_b6rag2$Origin),xlab="PC1",ylab="PC2")
+abline(h=0)
+abline(v=0)
+legend("bottomright",legend=levels(sm_b6rag2$Origin),fill=fac2col(levels(sm_b6rag2$Origin)),ncol=2)
+add.scatter.eig(ca1$eig,nf=3,xax=1,yax=2,posi="topright",ratio=0.15)
+
+s.class(ca1$li,fac=sm_b6rag2$Origin,xax=2,yax=3,label=NULL,col=fac2col(levels(sm_b6rag2$Origin),col.pal=funky),sub="CA 2-3",csub=1)
+add.scatter.eig(ca1$eig,nf=3,xax=2,yax=3,posi="bottomright",ratio=0.2)
 
 library(gsheet)
 sample_sheet="https://docs.google.com/spreadsheets/d/1L2u3CZV2v75bsRhfepGThshCqUjNhA8bzo453bDohSQ/edit?usp=sharing"
