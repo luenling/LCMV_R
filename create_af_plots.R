@@ -139,6 +139,7 @@ plot_element <- function (gR_entry, chrom_len, rh = 0.5,xoff=0.01,
 
 
 basedir="~/LCMV_Data/"
+basedir="~/Data/LCMV_project/"
 gff_virus <- import.gff(paste0(basedir,"/References/viruses_short.gff"))
 
 # read vcf file
@@ -246,23 +247,23 @@ s.label(ca1$li,xax=2,yax=3,lab=popNames(vcf_pop),sub="CA 1-3",csub=2)
 add.scatter.eig(ca1$eig,nf=3,xax=2,yax=3,posi="topleft")
 
 s.class(ca1$li,fac=smp_sh$txoxd,xax=2,yax=3,label=NULL,
-        col=fac2col(smp_sh$txoxd),sub="CA 1-2",csub=1)
+        col=fac2col(levels(smp_sh$txoxd)),sub="CA 1-2",csub=1)
 
-b6rag2 = factor(smp_sh$Sample[smp_sh$type ==  "B6-RAG2-/-LY5"])
+b6rag2 = factor(smp_sh$Sample[smp_sh$type ==  "B6-RAG2-/-LY5" & smp_sh$Sample != "S15"] )
 sm_b6rag2 <- subset(smp_sh, Sample %in% b6rag2)
 sm_b6rag2 <- lapply(sm_b6rag2, function(x) if(is.factor(x)) factor(x) else x)
+vcf_pop_b6rag2 <- vcf_pop[b6rag2,]
 
 library(corrplot)
 corrplot(as.matrix(dist.genpop(vcf_pop_b6rag2,method=2)), type = "full",is.corr=F)
 
-vcf_pop_b6rag2 <- vcf_pop[b6rag2,]
 ca1 <- dudi.coa(tab(vcf_pop_b6rag2),scannf=F,nf=4)
 ca2 <- dudi.pco(dist.genpop(vcf_pop_b6rag2,method=2), nf=4,scannf=F)
 plot(ca2$li[,1],ca2$li[,2],pch=19,col=fac2col(sm_b6rag2$Origin),xlab="PC1",ylab="PC2")
 abline(h=0)
 abline(v=0)
 legend("bottomright",legend=levels(sm_b6rag2$Origin),fill=fac2col(levels(sm_b6rag2$Origin)),ncol=2)
-text(ca2$li[,1],ca2$li[,2],labels = rownames(ca2$li), cex=0.5)
+text(ca2$li[,1],ca2$li[,2],labels = rownames(ca2$li), cex=0.75)
 add.scatter.eig(ca2$eig,nf=4,xax=1,yax=2,posi="bottomright",ratio=0.2)
 
 # find clusters
