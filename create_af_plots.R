@@ -139,6 +139,7 @@ plot_element <- function (gR_entry, chrom_len, rh = 0.5,xoff=0.01,
 
 
 basedir="~/LCMV_Data/"
+basedir="~/Data/LCMV_project/"
 gff_virus <- import.gff(paste0(basedir,"/References/viruses_short.gff"))
 
 # read vcf file
@@ -195,8 +196,21 @@ for (smps in smpls){
 
 q(save="no")
 
+# get sample sheet from google drive
+
+library(gsheet)
+sample_sheet="https://docs.google.com/spreadsheets/d/1L2u3CZV2v75bsRhfepGThshCqUjNhA8bzo453bDohSQ/edit?usp=sharing"
+smp_sh = gsheet2tbl(sample_sheet)
+smp_sh <- as.data.frame(lapply(smp_sh, factor)) 
+smp_sh = smp_sh[,1:4]
+smp_sh$type = as.factor(gsub('\\.\\d+$',"",smp_sh$Description,perl=T))
+smp_sh$txo = as.factor(paste(smp_sh$type,smp_sh$Origin,sep="x"))
+smp_sh$txoxd = as.factor(paste(smp_sh$type,smp_sh$Origin,smp_sh$Days,sep="x"))
+
+
+# load vcf file, should only contain SNPs and fully be annotated with AD2 and DPs
 vcf_file="/Volumes/vetlinux01/LCMV/Run_0355/VarDict_2/all_samps_vardict_filt_norm_0.01_snpeff_snp_only.vcf"
-vcf_file="all_samps_vardict_filt_norm_0.01_snpeff_snp_only.vcf"
+#vcf_file="all_samps_vardict_filt_norm_0.01_snpeff_snp_only.vcf"
 scan_form=c("DP","RD","AF","AD","AD2")
 scan_inf="ANN"
 svp <- ScanVcfParam(info=scan_inf,geno=scan_form)
@@ -209,21 +223,34 @@ library(adegenet)
 
 vcf2genpop <- function(vcf) {
   # should create a genpop object from a vcf of pooled indv.
-  # uses only AD field as of now, read depths becomes number of individuals
+  # uses preferentially AD field fallback to AFs, read depths becomes number of individuals
   # if NA/. and DP set use all reference as allele, else NA
   samps = rownames(colData(vcf))
   vcf_tab_t = matrix(NA, ncol = length(samps), nrow = 0)
-  for(loc in rownames(vcf) ) {
+  geno_names=names(geno(vcf))
+  for (loc in rownames(vcf) ) {
     l_base <- gsub("_[ACTG/]+$","",loc,perl=TRUE)
     l_base <- gsub(":","_",l_base,fixed=TRUE)
     a.num <- length(fixed(vcf[loc,])$ALT[[1]]) + 1
-    rvecs <- vapply(geno(vcf)[["AD"]][loc,],'[',1:a.num,1:a.num)
-    # check if reference depth was called from vardict
-    rvecs[1,is.na(rvecs[1,])] = rowSums(geno(vcf)$RD[loc,is.na(rvecs[1,]),])
-    # else use the one calculated by samtools mpileup (in AD2) or set to DP
-    rvecs[1,is.na(rvecs[1,])] =if ( length(geno(vcf)$AD2[loc,1][[1]]) > 0 ) vapply(geno(vcf)$AD2[loc,is.na(rvecs[1,])],'[[',1,1) else 100
-    # not reference allele fill NA with 0
-    rvecs[2:a.num,][which(is.na(rvecs[2:a.num,]))] = 0
+    if ("AD" %in% geno_names) {
+      # vardict or other caller using AD field 
+      rvecs <- vapply(geno(vcf)[["AD"]][loc,],'[',1:a.num,1:a.num)
+      # check if reference depth is set use this to fill depths of some NAs
+      if ("RD" %in% geno_names) {
+        rvecs[1,is.na(rvecs[1,])] = rowSums(geno(vcf)$RD[loc,is.na(rvecs[1,]),])
+      }
+      # use the depths calculated by samtools mpileup (in AD2) or finally set to DP
+      rvecs[1,is.na(rvecs[1,])] = if ( length(geno(vcf)$AD2[loc,1][[1]]) > 0 ) vapply(geno(vcf)$AD2[loc,is.na(rvecs[1,])],'[[',1,1) else 100
+      # not reference allele fill NA with 0
+      rvecs[2:a.num,][which(is.na(rvecs[2:a.num,]))] = 0
+    } else if ("AF" %in% geno_names) {
+      # use allele frequencies and DP to get approximate read counts
+      rvecs <- vapply(geno(vcf)[["AF"]][loc,],'[',as.double(1:(a.num-1)) )
+      rvecs[is.na(rvecs)] <- 0
+      
+      rvecs <- if(a.num < 3)  rbind(1-rvecs,rvecs)  else rbind(1-colSums(rvecs),rvecs)
+      rvecs <- t(apply(rvecs,1,function(x) round(x * geno(vcf)$DP[loc,])))
+    }
     # add rows to transposed tab and name them
     vcf_tab_t = rbind(vcf_tab_t,rvecs)
     rownames(vcf_tab_t)[(nrow(vcf_tab_t)-a.num+1):nrow(vcf_tab_t)] = paste0(l_base,".",1:a.num )
@@ -246,23 +273,23 @@ s.label(ca1$li,xax=2,yax=3,lab=popNames(vcf_pop),sub="CA 1-3",csub=2)
 add.scatter.eig(ca1$eig,nf=3,xax=2,yax=3,posi="topleft")
 
 s.class(ca1$li,fac=smp_sh$txoxd,xax=2,yax=3,label=NULL,
-        col=fac2col(smp_sh$txoxd),sub="CA 1-2",csub=1)
+        col=fac2col(levels(smp_sh$txoxd)),sub="CA 1-2",csub=1)
 
-b6rag2 = factor(smp_sh$Sample[smp_sh$type ==  "B6-RAG2-/-LY5"])
+b6rag2 = factor(smp_sh$Sample[smp_sh$type ==  "B6-RAG2-/-LY5" & smp_sh$Sample != "S15"] )
 sm_b6rag2 <- subset(smp_sh, Sample %in% b6rag2)
 sm_b6rag2 <- lapply(sm_b6rag2, function(x) if(is.factor(x)) factor(x) else x)
+vcf_pop_b6rag2 <- vcf_pop[b6rag2,]
 
 library(corrplot)
 corrplot(as.matrix(dist.genpop(vcf_pop_b6rag2,method=2)), type = "full",is.corr=F)
 
-vcf_pop_b6rag2 <- vcf_pop[b6rag2,]
 ca1 <- dudi.coa(tab(vcf_pop_b6rag2),scannf=F,nf=4)
 ca2 <- dudi.pco(dist.genpop(vcf_pop_b6rag2,method=2), nf=4,scannf=F)
 plot(ca2$li[,1],ca2$li[,2],pch=19,col=fac2col(sm_b6rag2$Origin),xlab="PC1",ylab="PC2")
 abline(h=0)
 abline(v=0)
 legend("bottomright",legend=levels(sm_b6rag2$Origin),fill=fac2col(levels(sm_b6rag2$Origin)),ncol=2)
-text(ca2$li[,1],ca2$li[,2],labels = rownames(ca2$li), cex=0.5)
+text(ca2$li[,1],ca2$li[,2],labels = rownames(ca2$li), cex=0.75)
 add.scatter.eig(ca2$eig,nf=4,xax=1,yax=2,posi="bottomright",ratio=0.2)
 
 # find clusters
@@ -288,16 +315,72 @@ add.scatter.eig(ca1$eig,nf=3,xax=1,yax=2,posi="topright",ratio=0.15)
 s.class(ca1$li,fac=sm_b6rag2$Origin,xax=2,yax=3,label=NULL,col=fac2col(levels(sm_b6rag2$Origin),col.pal=funky),sub="CA 2-3",csub=1)
 add.scatter.eig(ca1$eig,nf=3,xax=2,yax=3,posi="bottomright",ratio=0.2)
 
-library(gsheet)
-sample_sheet="https://docs.google.com/spreadsheets/d/1L2u3CZV2v75bsRhfepGThshCqUjNhA8bzo453bDohSQ/edit?usp=sharing"
-smp_sh = gsheet2tbl(sample_sheet)
-smp_sh <- as.data.frame(lapply(smp_sh, factor)) 
-smp_sh = smp_sh[,1:4]
-smp_sh$type = as.factor(gsub('\\.\\d+$',"",smp_sh$Description,perl=T))
-smp_sh$txo = as.factor(paste(smp_sh$type,smp_sh$Origin,sep="x"))
-smp_sh$txoxd = as.factor(paste(smp_sh$type,smp_sh$Origin,smp_sh$Days,sep="x"))
+
+#lofreq
+lofreq_vcf="/Volumes/vetlinux01/LCMV/Run_0355/BQSR/lofreq2_all_samp_bed_norm_0.01_snpeff_snp_only.vcf"
+scan_form=c("DP","AF")
+scan_inf="ANN"
+svp <- ScanVcfParam(info=scan_inf,geno=scan_form)
+lof_vcf <- readVcf( lofreq_vcf,"viruses",svp,row.names=T )
+
+lof_tab<-vcf2genpop(lof_vcf)
+lof_pop <- as.genpop(lof_tab,ploidy=1,type="codom")
+lof_d_nei <- dist.genpop(lof_pop)
 
 
+b6rag2 = factor(smp_sh$Sample[smp_sh$type ==  "B6-RAG2-/-LY5"] )
+sm_b6rag2 <- subset(smp_sh, Sample %in% b6rag2)
+sm_b6rag2 <- lapply(sm_b6rag2, function(x) if(is.factor(x)) factor(x) else x)
+
+ca1 <- dudi.coa(tab(lof_pop),scannf=FALSE,nf=3)
+barplot(ca1$eig,main="Correspondance Analysis eigenvalues",
+        col=heat.colors(length(ca1$eig)))
+
+
+s.label(ca1$li,xax=2,yax=3,lab=popNames(vcf_pop),sub="CA 1-3",csub=2)
+add.scatter.eig(ca1$eig,nf=3,xax=2,yax=3,posi="topleft")
+
+s.class(ca1$li,fac=smp_sh$txoxd,xax=2,yax=3,label=NULL,
+        col=fac2col(levels(smp_sh$txoxd)),sub="CA 1-2",csub=1)
+legend("topright",legend=levels(smp_sh$txoxd),fill=fac2col(levels(smp_sh$txoxd)),ncol=2,cex=0.5)
+
+
+
+
+b6rag2 = factor(smp_sh$Sample[smp_sh$type ==  "B6-RAG2-/-LY5" & smp_sh$Sample != "S15"] )
+sm_b6rag2 <- subset(smp_sh, Sample %in% b6rag2)
+sm_b6rag2 <- lapply(sm_b6rag2, function(x) if(is.factor(x)) factor(x) else x)
+lof_pop_b6rag2 <- lof_pop[b6rag2,]
+
+#library(corrplot)
+corrplot(as.matrix(dist.genpop(lof_pop_b6rag2,method=2)), type = "full",is.corr=F)
+
+ca1 <- dudi.coa(tab(lof_pop_b6rag2),scannf=F,nf=4)
+ca2 <- dudi.pco(dist.genpop(lof_pop_b6rag2,method=2), nf=4,scannf=F)
+plot(ca2$li[,1],ca2$li[,2],pch=19,col=fac2col(sm_b6rag2$Origin),xlab="PC1",ylab="PC2")
+plot(ca2$li[,1],ca2$li[,3],pch=19,col=fac2col(sm_b6rag2$Origin),xlab="PC1",ylab="PC3")
+abline(h=0)
+abline(v=0)
+legend("bottomright",legend=levels(sm_b6rag2$Origin),fill=fac2col(levels(sm_b6rag2$Origin)),ncol=2)
+text(ca2$li[,1],ca2$li[,2],labels = rownames(ca2$li), cex=0.75)
+
+add.scatter.eig(ca2$eig,nf=4,xax=1,yax=2,posi="bottomright",ratio=0.2)
+
+c57bl_6 = factor(smp_sh$Sample[smp_sh$type ==  "C57BL/6" ] )
+sm_c57bl_6 <- subset(smp_sh, Sample %in% c57bl_6)
+sm_c57bl_6 <- lapply(sm_c57bl_6, function(x) if(is.factor(x)) factor(x) else x)
+lof_pop_c57bl_6 <- lof_pop[c57bl_6,]
+
+corrplot(as.matrix(dist.genpop(lof_pop_c57bl_6,method=2)), type = "full",is.corr=F)
+
+ca1 <- dudi.coa(tab(lof_pop_c57bl_6),scannf=F,nf=4)
+ca2 <- dudi.pco(dist.genpop(lof_pop_c57bl_6,method=2), nf=4,scannf=F)
+plot(ca2$li[,1],ca2$li[,2],pch=19,col=fac2col(sm_c57bl_6$Origin),xlab="PC1",ylab="PC2")
+
+
+
+#library(corrplot)
+corrplot(as.matrix(dist.genpop(lof_pop_b6rag2,method=2)), type = "full",is.corr=F)
 
 
 
