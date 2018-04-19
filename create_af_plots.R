@@ -317,34 +317,104 @@ add.scatter.eig(ca1$eig,nf=3,xax=2,yax=3,posi="bottomright",ratio=0.2)
 
 
 #lofreq
+lofreq5_vcf="/Volumes/vetlinux01/LCMV/Run_0355/BQSR/lofreq2_all_samp_bed_norm_0.05_snpeff_snp_only.vcf"
 lofreq_vcf="/Volumes/vetlinux01/LCMV/Run_0355/BQSR/lofreq2_all_samp_bed_norm_0.01_snpeff_snp_only.vcf"
 scan_form=c("DP","AF")
 scan_inf="ANN"
 svp <- ScanVcfParam(info=scan_inf,geno=scan_form)
 lof_vcf <- readVcf( lofreq_vcf,"viruses",svp,row.names=T )
+lof5_vcf <- readVcf( lofreq5_vcf,"viruses",svp,row.names=T )
 
 lof_tab<-vcf2genpop(lof_vcf)
 lof_pop <- as.genpop(lof_tab,ploidy=1,type="codom")
-lof_d_nei <- dist.genpop(lof_pop)
+lof5_tab<-vcf2genpop(lof5_vcf)
+lof5_pop <- as.genpop(lof5_tab,ploidy=1,type="codom")
+lof5_d_nei <- dist.genpop(lof5_pop)
 
 
 b6rag2 = factor(smp_sh$Sample[smp_sh$type ==  "B6-RAG2-/-LY5"] )
 sm_b6rag2 <- subset(smp_sh, Sample %in% b6rag2)
-sm_b6rag2 <- lapply(sm_b6rag2, function(x) if(is.factor(x)) factor(x) else x)
+sm_b6rag2 <- as.data.frame(lapply(sm_b6rag2, function(x) if(is.factor(x)) factor(x) else x))
+lof_pop_b6rag2 <- lof_pop[b6rag2,]
+lof5_pop_b6rag2 <- lof5_pop[b6rag2,]
 
-ca1 <- dudi.coa(tab(lof_pop),scannf=FALSE,nf=3)
+
+# 5% MAF Lofreq
+ca1 <- dudi.coa(tab(lof5_pop_b6rag2),scannf=FALSE,nf=3)
 barplot(ca1$eig,main="Correspondance Analysis eigenvalues",
         col=heat.colors(length(ca1$eig)))
+s.class(ca1$li,fac=sm_b6rag2$txoxd,xax=1,yax=2,label=NULL,
+        col=fac2col(levels(sm_b6rag2$txoxd)),sub="CA 1-2",csub=1)
+legend("topright",legend=levels(sm_b6rag2$txoxd),fill=fac2col(levels(sm_b6rag2$txoxd)),ncol=2,cex=0.5)
+
+plot(ca1$li[,1],ca1$li[,2],pch=19,col=fac2col(sm_b6rag2$Origin),xlab="PC1",ylab="PC2",main=paste("Cor. Anal, MAF5%:",sm_b6rag2$type[1],sm_b6rag2$Days[1],sep="  ") )
+#plot(ca1$li[,1],ca1$li[,3],pch=19,col=fac2col(sm_b6rag2$Origin),xlab="PC1",ylab="PC3")
+abline(h=0)
+abline(v=0)
+legend("topright",legend=levels(sm_b6rag2$Origin),fill=fac2col(levels(sm_b6rag2$Origin)),ncol=2)
+text(ca1$li[,1],ca1$li[,2],labels = rownames(ca1$li), cex=0.75)
+# looking at contributions
+inertia.ca1 <- inertia.dudi(ca1, row.inertia = TRUE,col.inertia = TRUE)
+ca1.pc1.maxall = rownames(inertia.ca1$col.abs)[order(inertia.ca1$col.abs[,1],decreasing = T)][1:10]
+colSums(tab(lof5_pop_b6rag2)[,ca1.pc1.maxall] > 0.0)
+# makes no sense - different depths on different sites
+inertia.ca1$col.abs/100
+ca1$co[rowSums(ca1$co)>0.1,]
 
 
-s.label(ca1$li,xax=2,yax=3,lab=popNames(vcf_pop),sub="CA 1-3",csub=2)
-add.scatter.eig(ca1$eig,nf=3,xax=2,yax=3,posi="topleft")
+b6rag2 = factor(smp_sh$Sample[smp_sh$type ==  "B6-RAG2-/-LY5" & ! smp_sh$Sample %in% c("S15")] )
+sm_b6rag2 <- subset(smp_sh, Sample %in% b6rag2)
+sm_b6rag2 <- lapply(sm_b6rag2, function(x) if(is.factor(x)) factor(x) else x)
+lof5_pop_b6rag2 <- lof5_pop[b6rag2,]
 
-s.class(ca1$li,fac=smp_sh$txoxd,xax=2,yax=3,label=NULL,
-        col=fac2col(levels(smp_sh$txoxd)),sub="CA 1-2",csub=1)
-legend("topright",legend=levels(smp_sh$txoxd),fill=fac2col(levels(smp_sh$txoxd)),ncol=2,cex=0.5)
+ca2 <- dudi.pco(dist.genpop(lof5_pop_b6rag2,method=2), nf=4,scannf=F)
+plot(ca2$li[,1],ca2$li[,2],pch=19,col=fac2col(sm_b6rag2$Origin),xlab="PC1",ylab="PC2",
+     main=paste("PCoA MAF5% Reynolds distance:",sm_b6rag2$type[1],sm_b6rag2$Days[1],sep=" "))
+#plot(ca2$li[,1],ca2$li[,3],pch=19,col=fac2col(sm_b6rag2$Origin),xlab="PC1",ylab="PC3")
+abline(h=0)
+abline(v=0)
+legend("topright",legend=levels(sm_b6rag2$Origin),fill=fac2col(levels(sm_b6rag2$Origin)),ncol=2)
+text(ca2$li[,1],ca2$li[,2],labels = rownames(ca2$li), cex=0.75)
 
 
+
+b6rag2 = factor(smp_sh$Sample[smp_sh$type ==  "B6-RAG2-/-LY5" & ! smp_sh$Sample %in% c("S15","S13")] )
+sm_b6rag2 <- subset(smp_sh, Sample %in% b6rag2)
+sm_b6rag2 <- lapply(sm_b6rag2, function(x) if(is.factor(x)) factor(x) else x)
+lof5_pop_b6rag2 <- lof5_pop[b6rag2,]
+
+tabs = tab(lof5_pop_b6rag2,freq=T)
+tabs = tabs[, - grep('\\.1$',colnames(tabs),perl=T)]
+ca3 <- dudi.pca(tabs,scale = FALSE, scannf = FALSE, nf = 3)
+barplot(ca3$eig)
+plot(ca3$li[,1],ca3$li[,2],pch=19,col=fac2col(sm_b6rag2$Origin),xlab="PC1",ylab="PC2",
+     main=paste("PCA MAF5%:",sm_b6rag2$type[1],sm_b6rag2$Days[1],sep=" "))
+#plot(ca3$li[,2],ca3$li[,3],pch=19,col=fac2col(sm_b6rag2$Origin),xlab="PC2",ylab="PC3")
+abline(h=0)
+abline(v=0)
+legend("topright",legend=levels(sm_b6rag2$Origin),fill=fac2col(levels(sm_b6rag2$Origin)),ncol=2)
+text(ca3$li[,1],ca3$li[,2],labels = rownames(ca3$li), cex=0.75)
+# looking at contributions
+inertia.ca3 <- inertia.dudi(ca3, row.inertia = TRUE,col.inertia = TRUE)
+ca3.pc1.maxall = rownames(inertia.ca3$col.abs)[order(inertia.ca3$col.abs[,1],decreasing = T)][1:9]
+colSums(tab(lof5_pop_b6rag2,freq = T)[,ca3.pc1.maxall] > 0.0)
+round(tab(lof5_pop_b6rag2,freq = T)[,ca3.pc1.maxall],digits = 3)
+summary(inertia.ca3)
+# only 4 loci really contribute to first axis
+inertia.ca1$col.abs/100
+ca1$co[rowSums(ca1$co)>0.1,]
+
+# drawing some trees
+library(ape)
+library(dendextend)
+hc = hclust(dist.genpop(lof5_pop_b6rag2,method=2))
+plot(hc, col=fac2col(sm_b6rag2$Origin))
+
+
+nj_lof5_b6rag2 = bionj(dist.genpop(lof5_pop_b6rag2,method=2))
+plot(nj_lof5_b6rag2,show.tip.label=F)
+tiplabels(nj_lof5_b6rag2$tip.label, adj = c(0.0, 0.5), frame = "none" , bg = NULL, col = fac2col(sm_b6rag2$Origin))
+legend("topright",legend=levels(sm_b6rag2$Origin),fill=fac2col(levels(sm_b6rag2$Origin)),ncol=2)
 
 
 b6rag2 = factor(smp_sh$Sample[smp_sh$type ==  "B6-RAG2-/-LY5" & smp_sh$Sample != "S15"] )
@@ -353,9 +423,17 @@ sm_b6rag2 <- lapply(sm_b6rag2, function(x) if(is.factor(x)) factor(x) else x)
 lof_pop_b6rag2 <- lof_pop[b6rag2,]
 
 #library(corrplot)
-corrplot(as.matrix(dist.genpop(lof_pop_b6rag2,method=2)), type = "full",is.corr=F)
+corrplot(as.matrix(dist.genpop(lof_pop_b6rag2,method=4)), type = "full",is.corr=F)
 
 ca1 <- dudi.coa(tab(lof_pop_b6rag2),scannf=F,nf=4)
+plot(ca1$li[,1],ca1$li[,2],pch=19,col=fac2col(sm_b6rag2$Origin),xlab="PC1",ylab="PC2",main=paste("Cor. Anal:",sm_b6rag2$type[1],sm_b6rag2$Days[1],sep="  ") )
+#plot(ca1$li[,1],ca1$li[,3],pch=19,col=fac2col(sm_b6rag2$Origin),xlab="PC1",ylab="PC3")
+abline(h=0)
+abline(v=0)
+legend("topleft",legend=levels(sm_b6rag2$Origin),fill=fac2col(levels(sm_b6rag2$Origin)),ncol=2)
+text(ca1$li[,1],ca1$li[,2],labels = rownames(ca1$li), cex=0.75)
+
+
 ca2 <- dudi.pco(dist.genpop(lof_pop_b6rag2,method=2), nf=4,scannf=F)
 plot(ca2$li[,1],ca2$li[,2],pch=19,col=fac2col(sm_b6rag2$Origin),xlab="PC1",ylab="PC2")
 plot(ca2$li[,1],ca2$li[,3],pch=19,col=fac2col(sm_b6rag2$Origin),xlab="PC1",ylab="PC3")
@@ -366,7 +444,7 @@ text(ca2$li[,1],ca2$li[,2],labels = rownames(ca2$li), cex=0.75)
 
 add.scatter.eig(ca2$eig,nf=4,xax=1,yax=2,posi="bottomright",ratio=0.2)
 
-c57bl_6 = factor(smp_sh$Sample[smp_sh$type ==  "C57BL/6" ] )
+c57bl_6 = factor(smp_sh$Sample[smp_sh$type ==  "C57BL/6" & smp_sh$Days =="40 dpi" ] )
 sm_c57bl_6 <- subset(smp_sh, Sample %in% c57bl_6)
 sm_c57bl_6 <- lapply(sm_c57bl_6, function(x) if(is.factor(x)) factor(x) else x)
 lof_pop_c57bl_6 <- lof_pop[c57bl_6,]
@@ -376,6 +454,7 @@ corrplot(as.matrix(dist.genpop(lof_pop_c57bl_6,method=2)), type = "full",is.corr
 ca1 <- dudi.coa(tab(lof_pop_c57bl_6),scannf=F,nf=4)
 ca2 <- dudi.pco(dist.genpop(lof_pop_c57bl_6,method=2), nf=4,scannf=F)
 plot(ca2$li[,1],ca2$li[,2],pch=19,col=fac2col(sm_c57bl_6$Origin),xlab="PC1",ylab="PC2")
+plot(ca2$li[,2],ca2$li[,3],pch=19,col=fac2col(sm_c57bl_6$Origin),xlab="PC2",ylab="PC3")
 
 
 
