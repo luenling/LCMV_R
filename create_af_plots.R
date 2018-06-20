@@ -9,12 +9,27 @@ library(biovizBase)
 library(gridExtra)
 #library(vcfR)
 library(VariantAnnotation)
-
 library(GenomicFeatures)
-makeTxDbFromGFF(gff_virus)
-#ref_fa=FaFile(paste0(basedir,"/References/viruses_short.fasta"))
-txdb=makeTxDbFromGFF(paste0(basedir,"/References/viruses_short.gff"),format="auto",dataSource="ensemble",
-                     chrominfo =  Seqinfo(seqnames = c("L","S"),seqlength=c(7229,3377), isCircular=c(FALSE, FALSE)),taxonomyId=11623)
+#!/usr/bin/env Rscript
+library("optparse")
+
+option_list = list(
+  make_option(c("-b", "--basedir"), type="character", default="/Volumes/vetlinux01/Lukas/LCMV", 
+              help="basedir for data", metavar="character"),
+  make_option(c("-v", "--vcf"), type="character", default=NULL, 
+              help="vcf name and path", metavar="character"),
+  make_option(c("-o", "--out"), type="character", default=NULL, 
+              help="outfile basename/path", metavar="character")
+); 
+
+opt_parser = OptionParser(option_list=option_list);
+#opt=parse_args(opt_parser, args = c("-b","/Volumes/vetlinux01/LCMV/" ,"-v","/Volumes/vetlinux01/LCMV/Run_0468/VARDICT/all_samps_vardict_filt_norm_0.01_snpeff.vcf","-o","Vardict/vardict_maf_0.01"))
+opt = parse_args(opt_parser);
+basedir=opt$basedir
+#basedir="/Volumes/vetlinux01/LCMV"
+vcf_fn=opt$vcf
+#vcf_fn="/Volumes/vetlinux01/LCMV/Run_0468/VARDICT/all_samps_vardict_filt_norm_0.01_snpeff.vcf"
+out_base = opt$out 
 
 # with VariantAnnotation
 #coding <- predictCoding(vcf, txdb ,seqSource = ref_fa)
@@ -138,41 +153,56 @@ plot_element <- function (gR_entry, chrom_len, rh = 0.5,xoff=0.01,
 #################
 
 
-basedir="~/LCMV_Data/"
-basedir="~/Data/LCMV_project/"
 gff_virus <- import.gff(paste0(basedir,"/References/viruses_short.gff"))
+#makeTxDbFromGFF(gff_virus)
+#ref_fa=FaFile(paste0(basedir,"/References/viruses_short.fasta"))
+txdb=makeTxDbFromGFF(paste0(basedir,"/References/viruses_short.gff"),format="auto",dataSource="ensemble",
+                     chrominfo =  Seqinfo(seqnames = c("L","S"),seqlength=c(7229,3377), isCircular=c(FALSE, FALSE)),taxonomyId=11623)
 
 # read vcf file
-vcf_file=paste0(basedir,"/Run_0355/lofreq2_all_samp_bed_norm_0.05_snpeff.vcf")
+vcf_file=vcf_fn
 #vcf <- read.vcfR( vcf_file, verbose = FALSE )
 svp <- ScanVcfParam(info="ANN",geno=c("DP","AF"))
 vcf <- readVcf( vcf_file,"viruses",svp )
-# only get the second field of each functional annotation for each allele and put it into the ANN field, NA if none
+# changed for certain cases, check if annos contains '|'
 annos=vcfInfo(vcf)[["ANN"]]       
-annos=lapply(annos, function (x) if( length(x) == 0 ) {return (NA)} else {return(unlist(strsplit(x,",",fixed=TRUE)))})
-idx = which(sapply(1:length(annos), function(x) ! is.na(annos[[x]][1]) ) )
-annos[idx]=sapply(idx, function (x) sapply(strsplit(annos[[x]],"|",fixed=TRUE), "[",2 ))  
+# if any annos line contains | : only get the second field of each functional annotation for each allele and put it into the ANN field, NA if none
+# name the fields by their allele and sort them by it
+if (length(grep('|', unlist(annos))) > 0) {
+  annos=lapply(annos, function  (x) if( length(x) == 0 ) {return (NA)} else {return(unlist(strsplit(x,",",fixed=TRUE)))})
+  idx = which(sapply(1:length(annos), function(x) ! is.na(annos[[x]][1]) ) )
+  alleles = sapply(fixed(vcf)$ALT,function (x) as.vector(x))
+  annos[idx]=sapply(idx, function (x) { 
+    y<-sapply(strsplit(annos[[x]],"|",fixed=TRUE), "[",2 )
+    names(y) <- sapply(strsplit(annos[[x]],"|",fixed=TRUE), "[",1 )
+    return(y[alleles[[x]]])
+  })
+}
+
 vcfInfo(vcf)[["ANN"]] <- annos
 
 vir_clean = gff_virus[ ! (gff_virus$type %in% c("CDS","databank_entry")) ]
 mcols(vir_clean)$gene=c("5pUTR","GP","IGR","NP","3pUTR","5pUTR","Z","IGR","L","3pUTR")
 
 samples <- rownames(colData(vcf))
-
-layout(matrix(1:5, ncol = 1), widths = 1, respect = FALSE)
 chrom_lens=c(3377,7229)
 names(chrom_lens) = c("S","L")
-chrom="S"
-for (i in 1:4) {
-  print(paste("plotting sample",samples[i]))
-  reg <- plot_AFs_depths(vcf,chrom,samples[i],chrom_len = chrom_lens[chrom])
-}
+
+# layout(matrix(1:5, ncol = 1), widths = 1, respect = FALSE)
+# 
+# 
+# chrom="S"
+# for (i in 1:4) {
+#   print(paste("plotting sample",samples[i]))
+#   reg <- plot_AFs_depths(vcf,chrom,samples[i],chrom_len = chrom_lens[chrom])
+# }
 
 
 # idxst=seq(1,48,by = 5)
 smpls=split(samples,ceiling(seq_along(samples)/5))
 for (smps in smpls){
   for (chrom in c("S","L")){
+    pdf(file = paste0(out_base,"_AF_plot_S",smps[1],"_",smps[length(smps)],"_",chrom,".pdf") )
     layout(matrix(1:(length(smps)+2), ncol = 1), widths = 1, respect = FALSE)
     for (i in smps) {
       print(paste("plotting sample",i))
@@ -189,7 +219,8 @@ for (smps in smpls){
     legend("bottom",c("-","synonymous_variant","missense_variant","stop_lost","stop_gained","start_lost","inframe_deletion","frameshift_variant","disruptive_inframe_deletion","alt. allele 1", "alt. allele 2","alt. allele 3"),
            col=c("black","green","red","orangered","orange","orangered4","pink","purple","purple",rep("black",3)),
            pch=c(rep(3,9),3,4,8),cex=0.75,ncol=4)
-    dev.copy2pdf(file=paste0("plot_S",smps[1],"_",smps[length(smps)],"_",chrom,".pdf"))
+    dev.off()
+    #dev.copy2pdf(file=paste0(basename,"_AF_plot_S",smps[1],"_",smps[length(smps)],"_",chrom,".pdf"))
   }
 }
 
@@ -335,6 +366,7 @@ lof5_d_nei <- dist.genpop(lof5_pop)
 b6rag2 = factor(smp_sh$Sample[smp_sh$type ==  "B6-RAG2-/-LY5"] )
 sm_b6rag2 <- subset(smp_sh, Sample %in% b6rag2)
 sm_b6rag2 <- as.data.frame(lapply(sm_b6rag2, function(x) if(is.factor(x)) factor(x) else x))
+rownames(sm_b6rag2) <- sm_b6rag2$Sample
 lof_pop_b6rag2 <- lof_pop[b6rag2,]
 lof5_pop_b6rag2 <- lof5_pop[b6rag2,]
 
@@ -364,7 +396,8 @@ ca1$co[rowSums(ca1$co)>0.1,]
 
 b6rag2 = factor(smp_sh$Sample[smp_sh$type ==  "B6-RAG2-/-LY5" & ! smp_sh$Sample %in% c("S15")] )
 sm_b6rag2 <- subset(smp_sh, Sample %in% b6rag2)
-sm_b6rag2 <- lapply(sm_b6rag2, function(x) if(is.factor(x)) factor(x) else x)
+sm_b6rag2 <- as.data.frame(lapply(sm_b6rag2, function(x) if(is.factor(x)) factor(x) else x))
+rownames(sm_b6rag2) <- sm_b6rag2$Sample
 lof5_pop_b6rag2 <- lof5_pop[b6rag2,]
 
 ca2 <- dudi.pco(dist.genpop(lof5_pop_b6rag2,method=2), nf=4,scannf=F)
@@ -380,7 +413,8 @@ text(ca2$li[,1],ca2$li[,2],labels = rownames(ca2$li), cex=0.75)
 
 b6rag2 = factor(smp_sh$Sample[smp_sh$type ==  "B6-RAG2-/-LY5" & ! smp_sh$Sample %in% c("S15","S13")] )
 sm_b6rag2 <- subset(smp_sh, Sample %in% b6rag2)
-sm_b6rag2 <- lapply(sm_b6rag2, function(x) if(is.factor(x)) factor(x) else x)
+sm_b6rag2 <- as.data.frame(lapply(sm_b6rag2, function(x) if(is.factor(x)) factor(x) else x))
+rownames(sm_b6rag2) <- sm_b6rag2$Sample
 lof5_pop_b6rag2 <- lof5_pop[b6rag2,]
 
 tabs = tab(lof5_pop_b6rag2,freq=T)
@@ -407,8 +441,19 @@ ca1$co[rowSums(ca1$co)>0.1,]
 # drawing some trees
 library(ape)
 library(dendextend)
-hc = hclust(dist.genpop(lof5_pop_b6rag2,method=2))
-plot(hc, col=fac2col(sm_b6rag2$Origin))
+hc1 = as.dendrogram(hclust(dist.genpop(lof5_pop_b6rag2,method=4),method="complete"))
+hc2 = as.dendrogram(hclust(dist.genpop(lof5_pop_b6rag2,method=4),method="single"))
+hc3 = as.dendrogram(hclust(dist.genpop(lof5_pop_b6rag2,method=4),method="ward.D"))
+lof5_pop_b6rag2 %>% dist.genpop(method=4) %>% hclust(method="complete") %>% 
+  as.dendrogram() %>% set("labels_col", fac2col(sm_b6rag2[labels(.),"Origin"])) %>% 
+  plot()
+
+
+tanglegram(hc1,hc3)
+#plot(hc, col=fac2col(sm_b6rag2$Origin))
+#labels(hc)
+hc1 %>%  set("labels_col", fac2col(sm_b6rag2[labels(hc),"Origin"])) %>% plot()
+legend("topright",legend=levels(sm_b6rag2$Origin),fill=fac2col(levels(sm_b6rag2$Origin)),ncol=2)
 
 
 nj_lof5_b6rag2 = bionj(dist.genpop(lof5_pop_b6rag2,method=2))
