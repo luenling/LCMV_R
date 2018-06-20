@@ -335,6 +335,7 @@ lof5_d_nei <- dist.genpop(lof5_pop)
 b6rag2 = factor(smp_sh$Sample[smp_sh$type ==  "B6-RAG2-/-LY5"] )
 sm_b6rag2 <- subset(smp_sh, Sample %in% b6rag2)
 sm_b6rag2 <- as.data.frame(lapply(sm_b6rag2, function(x) if(is.factor(x)) factor(x) else x))
+rownames(sm_b6rag2) <- sm_b6rag2$Sample
 lof_pop_b6rag2 <- lof_pop[b6rag2,]
 lof5_pop_b6rag2 <- lof5_pop[b6rag2,]
 
@@ -364,7 +365,8 @@ ca1$co[rowSums(ca1$co)>0.1,]
 
 b6rag2 = factor(smp_sh$Sample[smp_sh$type ==  "B6-RAG2-/-LY5" & ! smp_sh$Sample %in% c("S15")] )
 sm_b6rag2 <- subset(smp_sh, Sample %in% b6rag2)
-sm_b6rag2 <- lapply(sm_b6rag2, function(x) if(is.factor(x)) factor(x) else x)
+sm_b6rag2 <- as.data.frame(lapply(sm_b6rag2, function(x) if(is.factor(x)) factor(x) else x))
+rownames(sm_b6rag2) <- sm_b6rag2$Sample
 lof5_pop_b6rag2 <- lof5_pop[b6rag2,]
 
 ca2 <- dudi.pco(dist.genpop(lof5_pop_b6rag2,method=2), nf=4,scannf=F)
@@ -380,7 +382,8 @@ text(ca2$li[,1],ca2$li[,2],labels = rownames(ca2$li), cex=0.75)
 
 b6rag2 = factor(smp_sh$Sample[smp_sh$type ==  "B6-RAG2-/-LY5" & ! smp_sh$Sample %in% c("S15","S13")] )
 sm_b6rag2 <- subset(smp_sh, Sample %in% b6rag2)
-sm_b6rag2 <- lapply(sm_b6rag2, function(x) if(is.factor(x)) factor(x) else x)
+sm_b6rag2 <- as.data.frame(lapply(sm_b6rag2, function(x) if(is.factor(x)) factor(x) else x))
+rownames(sm_b6rag2) <- sm_b6rag2$Sample
 lof5_pop_b6rag2 <- lof5_pop[b6rag2,]
 
 tabs = tab(lof5_pop_b6rag2,freq=T)
@@ -407,8 +410,19 @@ ca1$co[rowSums(ca1$co)>0.1,]
 # drawing some trees
 library(ape)
 library(dendextend)
-hc = hclust(dist.genpop(lof5_pop_b6rag2,method=2))
-plot(hc, col=fac2col(sm_b6rag2$Origin))
+hc1 = as.dendrogram(hclust(dist.genpop(lof5_pop_b6rag2,method=4),method="complete"))
+hc2 = as.dendrogram(hclust(dist.genpop(lof5_pop_b6rag2,method=4),method="single"))
+hc3 = as.dendrogram(hclust(dist.genpop(lof5_pop_b6rag2,method=4),method="ward.D"))
+lof5_pop_b6rag2 %>% dist.genpop(method=4) %>% hclust(method="complete") %>% 
+  as.dendrogram() %>% set("labels_col", fac2col(sm_b6rag2[labels(.),"Origin"])) %>% 
+  plot()
+
+
+tanglegram(hc1,hc3)
+#plot(hc, col=fac2col(sm_b6rag2$Origin))
+#labels(hc)
+hc1 %>%  set("labels_col", fac2col(sm_b6rag2[labels(hc),"Origin"])) %>% plot()
+legend("topright",legend=levels(sm_b6rag2$Origin),fill=fac2col(levels(sm_b6rag2$Origin)),ncol=2)
 
 
 nj_lof5_b6rag2 = bionj(dist.genpop(lof5_pop_b6rag2,method=2))
