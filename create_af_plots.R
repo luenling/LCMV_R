@@ -512,3 +512,14 @@ pairwise.fst(vcf_pop)
 dudi.pco(d_nei)
 library(adegenet)
 library(ade4)
+
+library(ggplot2)
+sg_codons=read.table("/Volumes/vetlinux01/LCMV/Run_0468/SNP_GENIE_VARDICT/all_samps_codon_results_sorted.txt",header=T,na.strings = "*",sep = "\t")
+str(sg_codons)
+sg_codons[is.na(sg_codons)]=0
+
+ggplot(sg_codons,aes(x=site,y=S_gdiv)) + geom_line(aes(color=Sample)) + facet_wrap(~ product,scales = "free_x")
+ggplot(sg_codons,aes(x=site,y=N_gdiv)) + geom_line(aes(color=Sample)) + facet_wrap(~ product,scales = "free_x")
+
+plot(sg_codons$site[sg_codons$product == "Z protein"],sg_codons$S_gdiv[sg_codons$product == "Z protein"])
+points(sg_codons$site[sg_codons$product == "Z protein"],sg_codons$N_gdiv[sg_codons$product == "Z protein"],col="red")
