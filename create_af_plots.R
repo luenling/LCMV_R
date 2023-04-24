@@ -1,5 +1,6 @@
 # library(ggplot2)
 library(RColorBrewer)
+library(openxlsx)
 library("reshape2")
 #library("Gviz")
 #library("ggbio")
@@ -9,7 +10,7 @@ library(biovizBase)
 library(gridExtra)
 #library(vcfR)
 library(VariantAnnotation)
-
+basedir = "~/Data/LCMV"
 library(GenomicFeatures)
 makeTxDbFromGFF(gff_virus)
 #ref_fa=FaFile(paste0(basedir,"/References/viruses_short.fasta"))
@@ -55,8 +56,9 @@ get_afs_annos  <- function(vcf,region_idx,sample) {
 plot_AFs_depths <- function(vcf,chrom,sample,annos=TRUE,depths=TRUE, chrom_len = FALSE,
                             cols=setNames(c("black","green","red","orangered","orange","orangered4","pink","purple","purple4"),
                                           c("-","synonymous_variant","missense_variant","stop_lost","stop_gained","start_lost","inframe_deletion","frameshift_variant","disruptive_inframe_deletion")
-                            ),symb=c(3,4,8,20,0,5,6),ylims=c(0.05,1.0)){
+                            ),symb=c(3,4,8,20,0,5,6),ylims=c(0.05,1.0), plotname = ""){
   df=as.data.frame(rowRanges(vcf))[,c("seqnames","start")]
+  if ( plotname == "" ) {plotname = sample}
   region_idx = which(df$seqnames == chrom)
   df$DP=geno(vcf)$DP[,sample]
   df_region=df[region_idx,]
@@ -70,7 +72,7 @@ plot_AFs_depths <- function(vcf,chrom,sample,annos=TRUE,depths=TRUE, chrom_len =
     xcol = "xpos"
   }
   par(mar = c(0, 4, 2, 4))
-  plot(df_region[,xcol], rep.int(0.5,length(df_region[,xcol])), pch=NULL, col="white", main=sample,log="y",
+  plot(df_region[,xcol], rep.int(0.5,length(df_region[,xcol])), pch=NULL, col="white", main=plotname,log="y",
        ylab="AF(%)",xlim=xlimit, xlab=NA,xaxt='n', yaxt="n",
        ylim=c(0.005,1))
   axis(2,at=c(0.01,0.05,0.1,0.5,1.0),labels = FALSE )
@@ -138,11 +140,11 @@ plot_element <- function (gR_entry, chrom_len, rh = 0.5,xoff=0.01,
 #################
 
 
-basedir="~/LCMV_Data/"
+basedir="~/Data/LCMV/"
 gff_virus <- import.gff(paste0(basedir,"/References/viruses_short.gff"))
 
 # read vcf file
-vcf_file=paste0(basedir,"/Run_0355/lofreq2_all_samp_bed_norm_0.05_snpeff.vcf")
+vcf_file="/Users/lendler/Data/LCMV_Data/Run_0355/lofreq2_all_samp_bed_norm_0.05_snpeff.vcf"
 #vcf <- read.vcfR( vcf_file, verbose = FALSE )
 svp <- ScanVcfParam(info="ANN",geno=c("DP","AF"))
 vcf <- readVcf( vcf_file,"viruses",svp )
@@ -158,10 +160,15 @@ mcols(vir_clean)$gene=c("5pUTR","GP","IGR","NP","3pUTR","5pUTR","Z","IGR","L","3
 
 samples <- rownames(colData(vcf))
 
-layout(matrix(1:5, ncol = 1), widths = 1, respect = FALSE)
+layout(matrix(1:2, ncol = 1), widths = 1, respect = FALSE)
 chrom_lens=c(3377,7229)
 names(chrom_lens) = c("S","L")
 chrom="S"
+for (chrom in c("S","L")) {
+  print(paste("plotting sample",samples[i]))
+  reg <- plot_AFs_depths(vcf,chrom,samples[i],chrom_len = chrom_lens[chrom])
+}
+
 for (i in 1:4) {
   print(paste("plotting sample",samples[i]))
   reg <- plot_AFs_depths(vcf,chrom,samples[i],chrom_len = chrom_lens[chrom])
@@ -169,6 +176,56 @@ for (i in 1:4) {
 
 
 # idxst=seq(1,48,by = 5)
+rag2 = c("S22","S23","S24")
+smps = rag2
+for (chrom in c("S","L")){
+  layout(matrix(1:(length(smps)+2), ncol = 1), widths = 1, respect = FALSE)
+  for (i in smps) {
+    print(paste("plotting sample",i))
+    reg <- plot_AFs_depths(vcf,chrom,i,chrom_len = chrom_lens[chrom])
+  }
+  par(mar = c(3, 4, 0, 4))
+  plot(1,10,pch=NULL,xlim=c(1,chrom_lens[chrom]),ylim=c(-1,1),ylab=NA,axes=FALSE,xlab=chrom,bty="n")
+  axis(side=1,at=0:(chrom_lens[chrom]/1000)*1000)
+  mtext(chrom, side=1, line=2)
+  for( i in 1:length(vir_clean[seqnames(vir_clean) == chrom])){
+    plot_element(vir_clean[seqnames(vir_clean) == chrom][i],chrom_lens[chrom],label=FALSE)
+  }
+  plot.new()
+  legend("bottom",c("-","synonymous_variant","missense_variant","stop_lost","stop_gained","start_lost","inframe_deletion","frameshift_variant","disruptive_inframe_deletion","alt. allele 1", "alt. allele 2","alt. allele 3"),
+         col=c("black","green","red","orangered","orange","orangered4","pink","purple","purple",rep("black",3)),
+         pch=c(rep(3,9),3,4,8),cex=0.75,ncol=4)
+  #dev.copy2pdf(file=paste0("plot_S",smps[1],"_",smps[length(smps)],"_",chrom,".pdf"))
+}
+
+rag2 = c("S01","S04","S07", "S10","S13")
+bl6 = c("S22","S23","S24")
+neo = c("S32","S33","S34","S35","S36")
+smps = neo
+smps = bl6 
+smps = rag2
+rownames(smp_sh) = smp_sh$Sample 
+for (chrom in c("S","L")){
+  layout(matrix(1:(length(smps)+2), ncol = 1), widths = 1, respect = FALSE)
+  for (i in smps) {
+    print(paste("plotting sample",i))
+    reg <- plot_AFs_depths(vcf,chrom,i,chrom_len = chrom_lens[chrom], plotname = paste(i,smp_sh[i, "Origin"], smp_sh[i, "Days"] ))
+  }
+  par(mar = c(3, 4, 0, 4))
+  plot(1,10,pch=NULL,xlim=c(1,chrom_lens[chrom]),ylim=c(-1,1),ylab=NA,axes=FALSE,xlab=chrom,bty="n")
+  axis(side=1,at=0:(chrom_lens[chrom]/1000)*1000)
+  mtext(chrom, side=1, line=2)
+  for( i in 1:length(vir_clean[seqnames(vir_clean) == chrom])){
+    plot_element(vir_clean[seqnames(vir_clean) == chrom][i],chrom_lens[chrom],label=FALSE)
+  }
+  plot.new()
+  legend("bottom",c("-","synonymous_variant","missense_variant","stop_lost","stop_gained","start_lost","inframe_deletion","frameshift_variant","disruptive_inframe_deletion","alt. allele 1", "alt. allele 2","alt. allele 3"),
+         col=c("black","green","red","orangered","orange","orangered4","pink","purple","purple",rep("black",3)),
+         pch=c(rep(3,9),3,4,8),cex=0.75,ncol=4)
+  #dev.copy2pdf(file=paste0("plot_S",smps[1],"_",smps[length(smps)],"_",chrom,".pdf"))
+}
+
+
 smpls=split(samples,ceiling(seq_along(samples)/5))
 for (smps in smpls){
   for (chrom in c("S","L")){
@@ -188,15 +245,15 @@ for (smps in smpls){
     legend("bottom",c("-","synonymous_variant","missense_variant","stop_lost","stop_gained","start_lost","inframe_deletion","frameshift_variant","disruptive_inframe_deletion","alt. allele 1", "alt. allele 2","alt. allele 3"),
            col=c("black","green","red","orangered","orange","orangered4","pink","purple","purple",rep("black",3)),
            pch=c(rep(3,9),3,4,8),cex=0.75,ncol=4)
-    dev.copy2pdf(file=paste0("plot_S",smps[1],"_",smps[length(smps)],"_",chrom,".pdf"))
+    #dev.copy2pdf(file=paste0("plot_S",smps[1],"_",smps[length(smps)],"_",chrom,".pdf"))
   }
 }
 
 
 q(save="no")
 
-vcf_file="/Volumes/vetlinux01/LCMV/Run_0355/VarDict_2/all_samps_vardict_filt_norm_0.01_snpeff_snp_only.vcf"
-vcf_file="all_samps_vardict_filt_norm_0.01_snpeff_snp_only.vcf"
+vcf_file="~/Data/LCMV/Run_0355/VarDict_2/all_samps_vardict_filt_norm_0.01_snpeff_snp_only.vcf"
+vcf_file="/Users/lendler/Data/LCMV/LCMV_R/all_samps_vardict_filt_norm_0.01_snpeff_snp_only.vcf"
 scan_form=c("DP","RD","AF","AD","AD2")
 scan_inf="ANN"
 svp <- ScanVcfParam(info=scan_inf,geno=scan_form)
@@ -268,9 +325,48 @@ add.scatter.eig(ca2$eig,nf=4,xax=1,yax=2,posi="bottomright",ratio=0.2)
 # find clusters
 find.clusters(tab(vcf_pop_b6rag2),max.n=6)
 
+# remove S15
+vcf_pop_b6rag2 <- vcf_pop_b6rag2[rownames(tab(vcf_pop_b6rag2)) != "S15",]
+ca1 <- dudi.coa(tab(vcf_pop_b6rag2),scannf=F,nf=4)
+ca2 <- dudi.pco(dist.genpop(vcf_pop_b6rag2,method=2), nf=4,scannf=F)
+plot(ca2$li[,1],ca2$li[,2],pch=19,col=as.character(fac2col(sm_b6rag2$Origin)),xlab="PC1",ylab="PC2", main = "Principal Coordinate Analysis, Edwards distance, Rag2-/- 40dpi")
+abline(h=0, lty = 2)
+abline(v=0, lty = 2)
+legend("bottomright",legend=levels(sm_b6rag2$Origin),fill=fac2col(levels(sm_b6rag2$Origin)),ncol=2)
+#text(ca2$li[,1],ca2$li[,2],labels = rownames(ca2$li), cex=0.5)
+plot.new()
+add.scatter.eig(ca2$eig,nf=4,xax=1,yax=2,posi="bottom",ratio=0.2)
+
 # hclust tree
 hc_b6rag2 = hclust(dist.genpop(vcf_pop_b6rag2,method=1), method= "complete" )
 plot(hc_b6rag2,labels=sm_b6rag2$Sample,col=fac2col(sm_b6rag2$Origin))
+
+# MDS
+mds_b6rag2 <- cmdscale(dist.genpop(vcf_pop_b6rag2,method=2),eig=TRUE,k=4,x.ret=TRUE)
+plot(mds_b6rag2$points[,1],mds_b6rag2$points[,2])
+
+b6 = factor(smp_sh$Sample[smp_sh$type ==  "C57BL/6" & smp_sh$Days == "40 dpi"])
+sm_b6 <- subset(smp_sh, Sample %in% b6)
+sm_b6 <- lapply(sm_b6, function(x) if(is.factor(x)) factor(x) else x)
+vcf_pop_b6 <- vcf_pop[b6,]
+ca1 <- dudi.coa(tab(vcf_pop_b6),scannf=F,nf=4)
+ca2 <- dudi.pco(dist.genpop(vcf_pop_b6,method=2), nf=4,scannf=F)
+plot(ca2$li[,2],ca2$li[,3],pch=19,col=as.character(fac2col(sm_b6$Origin)),xlab="PC1",ylab="PC2", main = "Principal Coordinate Analysis, Edwards distance, C57BL/6 40dpi")
+abline(h=0, lty = 2)
+abline(v=0, lty = 2)
+legend("bottomright",legend=levels(sm_b6rag2$Origin),fill=fac2col(levels(sm_b6rag2$Origin)),ncol=2)
+#text(ca2$li[,1],ca2$li[,2],labels = rownames(ca2$li), cex=0.5)
+plot.new()
+add.scatter.eig(ca2$eig,nf=4,xax=1,yax=2,posi="bottom",ratio=0.2)
+
+library(dendextend)
+# hclust tree
+sm_b6 = data.frame(sm_b6)
+rownames(sm_b6) = sm_b6$Sample
+hc_b6 = as.dendrogram(hclust(dist.genpop(vcf_pop_b6,method=2), method= "complete" ))
+labels_colors(hc_b6) <- fac2col(sm_b6[labels(hc_b6),"Origin"])
+labels(hc_b6)=paste( labels(hc_b6), sm_b6[labels(hc_b6),"Origin"])
+plot(hc_b6, main = "C57BL/6, Edwards distance", xlab = "")
 
 # MDS
 mds_b6rag2 <- cmdscale(dist.genpop(vcf_pop_b6rag2,method=2),eig=TRUE,k=4,x.ret=TRUE)
@@ -305,3 +401,33 @@ pairwise.fst(vcf_pop)
 dudi.pco(d_nei)
 library(adegenet)
 library(ade4)
+
+## Look at ARM CL13 transition
+
+setwd("~/Cemm_sync/LCMV_Virseq/")
+k151_2_QSV = setDT(read.xlsx("ARM_CL13_transition/K151_K152_QSV_summary.xlsx"))
+names(k151_2_QSV) = c("organ","mouse","dpi","experiment","ARM","CL13")
+#k151_2_QSVm = setDT(melt(k151_2_QSV, measure.vars = c("ARM","CL13"), variable.name = "Variant", value.name = "fraction"))
+k151_2_QSV[, dpi := factor(gsub(" dpi$","", dpi))]
+ggplot(k151_2_QSV, aes(x = organ, y = CL13, color = dpi)) + geom_boxplot() + geom_dotplot(binaxis='y', stackdir='center', position=position_dodge(1)) + facet_grid( experiment ~ .)
+
+
+k151_QSV = setDT(read.xlsx("ARM_CL13_transition/K151_K152_QSV_summary.xlsx","151"))
+names(k151_QSV) = c("organ","mouse","dpi","experiment","ARM","CL13")
+k152_QSV = setDT(read.xlsx("ARM_CL13_transition/K151_K152_QSV_summary.xlsx","152"))
+names(k152_QSV) = c("organ","mouse","dpi","experiment","ARM","CL13")
+k151_2_QSVb = setDT(rbind(k151_QSV,k152_QSV))
+k151_2_QSVb[, dpi := factor(gsub(" dpi$","", dpi))]
+k151_2_QSVb_meds = k151_2_QSVb[, median(CL13) , by = .(experiment,organ,dpi)]
+k151_2_QSVb_meds[, xpos := as.numeric(dpi)]
+k151_2_QSVb_meds[, id := paste(experiment,organ)]
+merge( k151_2_QSVb_meds[dpi == 30],  k151_2_QSVb_meds[dpi == 60, .(id, V1)], by = c("id") ) 
+ggplot(k151_2_QSVb, aes(x = dpi, y = CL13,  color = dpi)) + 
+  geom_jitter(width = 0.1, show.legend = FALSE)  +
+  geom_point(k151_2_QSVb_meds, mapping = aes(x=xpos,y=V1), shape = 3,  color = "black") +
+  scale_y_continuous("fraction GP260L", breaks = c(0,0.5,1), labels = c(0,0.5,1.0), c(0,1.0)) +
+  geom_line(k151_2_QSVb_meds, mapping = aes(x=xpos,y=V1), color = "black") + 
+  xlab("days post infection") + ylab("fraction GP260L") +  
+  facet_grid( experiment ~ organ, labeller = labeller("experiment" = setNames(c("Rag2-/-","Neonatal"),c("151","152")))) + theme_bw()
+
+              
